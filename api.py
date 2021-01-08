@@ -10,8 +10,8 @@ import uuid
 from optparse import OptionParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from scoring import get_interests, get_score
-
 # from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -159,9 +159,6 @@ class ClientsInterestsRequest(object):
     client_ids = ClientIDsField(required=True, nullable=False)
     date = DateField(required=False, nullable=True)
 
-    def update_dict(self, kwargs):
-        self.client_ids, self.date = kwargs.get("client_ids", None), kwargs.get("date", None)
-
     def check_req(self):
         pass
 
@@ -180,11 +177,6 @@ class OnlineScoreRequest(object):
     phone = PhoneField(required=False, nullable=True)
     birthday = BirthDayField(required=False, nullable=True)
     gender = GenderField(required=False, nullable=True)
-
-    def update_dict(self, kwargs):
-        self.first_name, self.last_name = kwargs.get("first_name", None), kwargs.get("last_name", None)
-        self.email, self.phone = kwargs.get("email", None), kwargs.get("phone", None)
-        self.birthday, self.gender = kwargs.get("birthday", None), kwargs.get("gender", None)
 
     def check_req(self):
         if (not self.first_name and not self.last_name) or (
@@ -213,16 +205,16 @@ class MethodRequest(object):
     def is_admin(self):
         return self.login == ADMIN_LOGIN
 
-    def update_dict(self, kwargs):
-        self.account, self.login = kwargs.get("account", None), kwargs.get("login", None)
-        self.token, self.arguments = kwargs.get("token", None), kwargs.get("arguments", None)
-        self.method = kwargs.get("method", None)
+    @staticmethod
+    def update_dict(obj, kwargs, cls):
+        for k, v in cls.__dict__.items():
+            if "__" not in k and k in kwargs:
+                cls.__setattr__(obj, k, kwargs[k])
 
 
 def check_auth(request):
     if request.is_admin:
-        password = datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT
-        digest = hashlib.sha512(password.encode()).hexdigest()
+        digest = hashlib.sha512((datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).encode()).hexdigest()
     else:
         digest = hashlib.sha512((request.account + request.login + SALT).encode()).hexdigest()
     if digest == request.token:
@@ -234,14 +226,14 @@ def method_handler(request, ctx, store):
     response, code, resp = None, None, None
     try:
         req = MethodRequest()
-        req.update_dict(request["body"])
+        MethodRequest.update_dict(req, request["body"], req.__class__)
         if check_auth(req):
             prop = request["body"]["arguments"]
             if req.method == "online_score":
                 resp = OnlineScoreRequest()
             elif req.method == "clients_interests":
                 resp = ClientsInterestsRequest()
-            resp.update_dict(prop)
+            MethodRequest.update_dict(resp, prop, resp.__class__)
             resp.check_req()
             ctx.update(resp.special_row)
             if req.is_admin and req.method == "online_score":

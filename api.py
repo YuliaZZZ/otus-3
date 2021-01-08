@@ -275,7 +275,6 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
                 try:
                     response, code, context = self.router[path]({"body": request, "headers": self.headers}, context,
                                                                 self.store)
-                    print(response, code, context)
                 except Exception as e:
                     logging.exception("Unexpected error: %s" % e)
                     code = INTERNAL_ERROR

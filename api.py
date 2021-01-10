@@ -10,7 +10,6 @@ import uuid
 from optparse import OptionParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from scoring import get_interests, get_score
-# from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 
 
 SALT = "Otus"
@@ -47,27 +46,20 @@ class Field(abc.ABC):
 
 class Value(Field):
     def __init__(self, required, nullable):
-        # self.value = None
         self.label = None
         self._null = nullable
         self._req = required
 
     def __get__(self, obj, obj_type):
-        # return self.value
         return obj.__dict__[self.label]
 
     def __set__(self, obj, val):
-        if self._null is False and val in [None, '']:
+        if self._null is False and val in [None, '', []]:
             raise ValueError(f"Поле {self.label} не может быть пустым.")
         elif self._null is True and val in [None, '']:
-            # self.value = None
             obj.__dict__[self.label] = None
         else:
-            # self.value = self._check(val)
             obj.__dict__[self.label] = self._check(val)
-        # if self.value is None and self._req is True:
-        if obj.__dict__[self.label] is None and self._req is True:
-            raise ValueError(f"Поле {self.label} является обязательным")
 
     def __set_name__(self, owner, name):
         self.label = name
@@ -85,7 +77,6 @@ class CharField(Value, Field):
 class ArgumentsField(Value, Field):
     def _check(self, value):
         try:
-            # value = json.loads(value)
             assert isinstance(value, dict)
         except (AssertionError, ValueError):
             raise TypeError(f'Поле {self.label} должно быть объектом json')
@@ -140,7 +131,8 @@ class GenderField(Value, Field):
         try:
             assert value in list(GENDERS.keys())
         except AssertionError:
-            raise ValueError(f'Поле {self.label} должно иметь одно из следующих значений: {list(GENDERS.keys())}')
+            raise ValueError(
+                f'Поле {self.label} должно иметь одно из следующих значений: {list(GENDERS.keys())}')
         else:
             return value
 
@@ -149,6 +141,7 @@ class ClientIDsField(Value, Field):
     def _check(self, value):
         try:
             assert isinstance(value, list) or isinstance(value, tuple)
+            assert list(map(lambda x: isinstance(x, int), value)) == [True for i in value]
         except AssertionError:
             raise ValueError(f'Поле {self.label} должно содержать перечень значений id')
         else:
@@ -159,14 +152,14 @@ class ClientsInterestsRequest(object):
     client_ids = ClientIDsField(required=True, nullable=False)
     date = DateField(required=False, nullable=True)
 
-    def check_req(self):
+    def _check_req(self):
         pass
 
     @property
     def special_row(self):
         return {"nclients": len(self.client_ids)}
 
-    def start_method(self, store):
+    def _start_method(self, store):
         return {f"client_id{i}": get_interests(store, i) for i in self.client_ids}
 
 
@@ -178,20 +171,23 @@ class OnlineScoreRequest(object):
     birthday = BirthDayField(required=False, nullable=True)
     gender = GenderField(required=False, nullable=True)
 
-    def check_req(self):
-        if (not self.first_name and not self.last_name) or (
-                not self.phone and not self.email) or (
-                not self.birthday and not self.gender
+    def _check_req(self):
+        if (self.first_name and self.last_name) or (
+                self.phone and self.email) or (
+                self.birthday and self.gender in list(GENDERS.keys())
         ):
+            pass
+        else:
             raise ValueError("Не валидный запрос")
 
-    def start_method(self, store):
-        return {"score": get_score(store, self.phone, self.email, self.birthday, self.gender,
-                                   self.first_name, self.last_name)}
+    def _start_method(self, store):
+        return {"score": get_score(store, self.phone, self.email, self.birthday,
+                                   self.gender, self.first_name, self.last_name)}
 
     @property
     def special_row(self):
-        return {"has": [key for key, value in self.__dict__.items() if value]}
+        return {
+            "has": [key for key, value in self.__dict__.items() if value or value == 0]}
 
 
 class MethodRequest(object):
@@ -208,15 +204,27 @@ class MethodRequest(object):
     @staticmethod
     def update_dict(obj, kwargs, cls):
         for k, v in cls.__dict__.items():
-            if "__" not in k and k in kwargs:
+            if k[0] != "_" and k in kwargs:
                 cls.__setattr__(obj, k, kwargs[k])
+            elif k[0] != "_":
+                prop = cls.__dict__[k]
+                property_val = None
+                cls_property = prop.__class__
+                if not issubclass(cls_property, staticmethod) and (not issubclass(cls_property, property)):
+                    property_val = prop._req
+                    if property_val:
+                        raise ValueError(f"Поле {k} обязательно.")
+                    else:
+                        cls.__setattr__(obj, k, None)
 
 
 def check_auth(request):
     if request.is_admin:
-        digest = hashlib.sha512((datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).encode()).hexdigest()
+        digest = hashlib.sha512(
+            (datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).encode()).hexdigest()
     else:
-        digest = hashlib.sha512((request.account + request.login + SALT).encode()).hexdigest()
+        digest = hashlib.sha512(
+            (request.account + request.login + SALT).encode()).hexdigest()
     if digest == request.token:
         return True
     return False
@@ -226,24 +234,32 @@ def method_handler(request, ctx, store):
     response, code, resp = None, None, None
     try:
         req = MethodRequest()
-        MethodRequest.update_dict(req, request["body"], req.__class__)
+        req.account, req.token, req.login = request["body"]["account"], request["body"]["token"], \
+                                            request["body"]["login"]
         if check_auth(req):
             prop = request["body"]["arguments"]
+            MethodRequest.update_dict(req, request["body"], req.__class__)
+
             if req.method == "online_score":
                 resp = OnlineScoreRequest()
             elif req.method == "clients_interests":
                 resp = ClientsInterestsRequest()
+
             MethodRequest.update_dict(resp, prop, resp.__class__)
-            resp.check_req()
+            resp._check_req()
             ctx.update(resp.special_row)
+
             if req.is_admin and req.method == "online_score":
-                response, code = {'score': ADMIN_SALT}, OK
+                response, code = {'score': int(ADMIN_SALT)}, OK
             else:
-                response, code = resp.start_method(store), OK
+                response, code = resp._start_method(store), OK
         else:
-            response, code = ERRORS[FORBIDDEN], FORBIDDEN
+            raise PermissionError
+    except PermissionError:
+        response, code = ERRORS[FORBIDDEN], FORBIDDEN
     except Exception as e:
-        response, code = e, INVALID_REQUEST
+        response, code = ERRORS[INVALID_REQUEST], INVALID_REQUEST
+        logging.error(f"{Exception, e}")
 
     return response, code, ctx
 

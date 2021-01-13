@@ -4,6 +4,7 @@ import functools
 import unittest
 
 import api
+from store import Store
 
 
 def cases(cases):
@@ -11,8 +12,11 @@ def cases(cases):
         @functools.wraps(f)
         def wrapper(*args):
             for c in cases:
-                new_args = args + (c if isinstance(c, tuple) else (c,))
-                f(*new_args)
+                try:
+                    new_args = args + (c if isinstance(c, tuple) else (c,))
+                    f(*new_args)
+                except Exception:
+                    raise Exception(f.__name__, c)
         return wrapper
     return decorator
 
@@ -21,7 +25,7 @@ class TestSuite(unittest.TestCase):
     def setUp(self):
         self.context = {}
         self.headers = {}
-        self.settings = {}
+        self.settings = Store()  # {}
 
     def get_response(self, request):
         return api.method_handler({"body": request, "headers": self.headers}, self.context, self.settings)
@@ -126,18 +130,13 @@ class TestSuite(unittest.TestCase):
 
     @cases([
         {"client_ids": [1, 2, 3], "date": datetime.datetime.today().strftime("%d.%m.%Y")},
-        {"client_ids": [1, 2], "date": "19.07.2017"},
-        {"client_ids": [0]},
+        {"client_ids": [1, 2], "date": "19.07.2017"}
     ])
-    def test_ok_interests_request(self, arguments):
+    def test_store_empty_intests_request(self, arguments):
         request = {"account": "horns&hoofs", "login": "h&f", "method": "clients_interests", "arguments": arguments}
         self.set_valid_auth(request)
         response, code, ctx = self.get_response(request)
-        self.assertEqual(api.OK, code, arguments)
-        self.assertEqual(len(arguments["client_ids"]), len(response))
-        self.assertTrue(all(v and isinstance(v, list) and all(isinstance(i, str) for i in v)
-                        for v in response.values()))
-        self.assertEqual(self.context.get("nclients"), len(arguments["client_ids"]))
+        self.assertEqual(api.INVALID_REQUEST, code, arguments)
 
 
 if __name__ == "__main__":

@@ -9,8 +9,9 @@ import hashlib
 import uuid
 from optparse import OptionParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from scoring import get_interests, get_score
-
+# from scoring import get_interests, get_score
+from scoring2 import get_interests, get_score
+from store import Store
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -160,7 +161,7 @@ class ClientsInterestsRequest(object):
         return {"nclients": len(self.client_ids)}
 
     def _start_method(self, store):
-        return {f"client_id{i}": get_interests(store, i) for i in self.client_ids}
+        return {f"i:{i}": get_interests(store, i) for i in self.client_ids}
 
 
 class OnlineScoreRequest(object):
@@ -268,7 +269,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
     router = {
         "method": method_handler
     }
-    store = None
+    store = Store()  # None
 
     def get_request_id(self, headers):
         return headers.get('HTTP_X_REQUEST_ID', uuid.uuid4().hex)

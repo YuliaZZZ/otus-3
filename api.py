@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import abc
 import json
 import datetime
 import logging
@@ -10,7 +9,6 @@ import uuid
 from optparse import OptionParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from scoring import get_interests, get_score
-
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -38,117 +36,108 @@ GENDERS = {
 }
 
 
-class Field(abc.ABC):
-    @abc.abstractmethod
-    def _check(self, value):
-        pass
-
-
-class Value(Field):
+class Value(object):
     def __init__(self, required, nullable):
         self.label = None
-        self._null = nullable
-        self._req = required
+        self.null = nullable
+        self.req = required
 
     def __get__(self, obj, obj_type):
         return obj.__dict__[self.label]
 
     def __set__(self, obj, val):
-        if self._null is False and val in [None, '', []]:
+        if not self.null and val in [None, '', []]:
             raise ValueError(f"Поле {self.label} не может быть пустым.")
-        elif self._null is True and val in [None, '']:
+        elif self.null and val in [None, '']:
             obj.__dict__[self.label] = None
         else:
-            obj.__dict__[self.label] = self._check(val)
+            obj.__dict__[self.label] = self._get_value(val)
 
     def __set_name__(self, owner, name):
         self.label = name
 
+    def _get_value(self, value):
+        pass
 
-class CharField(Value, Field):
-    def _check(self, value):
-        try:
-            assert isinstance(value, str)
-        except AssertionError:
-            raise TypeError(f'Поле {self.label} должно содержать строковое значение')
+
+class CharField(Value):
+    def _get_value(self, value):
+        if not isinstance(value, str):
+            raise ValueError(f'Поле {self.label} должно содержать строковое значение')
         return value
 
 
-class ArgumentsField(Value, Field):
-    def _check(self, value):
-        try:
-            assert isinstance(value, dict)
-        except (AssertionError, ValueError):
-            raise TypeError(f'Поле {self.label} должно быть объектом json')
+class ArgumentsField(Value):
+    def _get_value(self, value):
+        if not isinstance(value, dict):
+            raise ValueError(f'Поле {self.label} должно быть объектом json')
         return value
 
 
 class EmailField(CharField):
-    def _check(self, value):
-        try:
-            super(CharField, self)._check(value)
-            assert '@' in value
-        except AssertionError:
-            raise ValueError(f'Поле {self.label} должно содержать @')
-        return value
+    def _get_value(self, value):
+        if '@' in value:
+            super(CharField, self)._get_value(value)
+            return value
+        raise ValueError(f'Поле {self.label} должно содержать @')
 
 
-class PhoneField(Value, Field):
-    def _check(self, value):
-        try:
-            value = str(value)
-            assert len(value) == 11
-            assert value[0] == '7'
-        except AssertionError:
-            raise ValueError(f'Поле {self.label} должно содержать 11 цифр и начинаться с 7')
-        return value
+class PhoneField(Value):
+    def _get_value(self, value):
+        value = str(value)
+        if len(value) == 11 and value[0] == '7':
+            return value
+        raise ValueError(f'Поле {self.label} должно содержать 11 цифр и начинаться с 7')
 
 
-class DateField(Value, Field):
-    def _check(self, value):
-        try:
-            value = datetime.datetime.strptime(value, "%d.%m.%Y")
-            # value_f = value.strftime("%d.%m.%Y")
-            assert isinstance(value, datetime.date)
-        except (AssertionError, ValueError):
-            raise ValueError(f'Поле {self.label} должно содержать дату в формате ДД.ММ.ГГГГ')
-        return value
+class DateField(Value):
+    def _get_value(self, value):
+        value = datetime.datetime.strptime(value, "%d.%m.%Y")
+        if isinstance(value, datetime.date):
+            return value
+        raise ValueError(f'Поле {self.label} должно содержать дату в формате ДД.ММ.ГГГГ')
 
 
 class BirthDayField(DateField):
-    def _check(self, value):
+    def _get_value(self, value):
         delta = datetime.datetime.now() - datetime.timedelta(days=(365 * 70))
-        try:
-            value = DateField._check(self, value)
-            assert value >= delta
-        except (AssertionError, ValueError):
-            raise ValueError(f'Поле {self.label} должно содержать дату в формате ДД.ММ.ГГГГ')
-        return value
-
-
-class GenderField(Value, Field):
-    def _check(self, value):
-        try:
-            assert value in list(GENDERS.keys())
-        except AssertionError:
-            raise ValueError(
-                f'Поле {self.label} должно иметь одно из следующих значений: {list(GENDERS.keys())}')
-        else:
+        value = DateField._get_value(self, value)
+        if value >= delta:
             return value
+        raise ValueError(f'Поле {self.label} должно содержать дату в формате ДД.ММ.ГГГГ')
 
 
-class ClientIDsField(Value, Field):
-    def _check(self, value):
-        try:
-            assert isinstance(value, list) or isinstance(value, tuple)
-            assert list(map(lambda x: isinstance(x, int), value)) == [True for i in value]
-        except AssertionError:
-            raise ValueError(f'Поле {self.label} должно содержать перечень значений id')
-        else:
+class GenderField(Value):
+    def _get_value(self, value):
+        if value in list(GENDERS.keys()):
             return value
+        raise ValueError(
+            f'Поле {self.label} должно иметь одно из следующих значений: {list(GENDERS.keys())}')
 
 
-class ClientsInterestsRequest(object):
+class ClientIDsField(Value):
+    def _get_value(self, value):
+        if isinstance(value, list) or isinstance(value, tuple):
+            if list(map(lambda x: isinstance(x, int), value)) == [True for i in value]:
+                return value
+        raise ValueError(f'Поле {self.label} должно содержать перечень значений id')
+
+
+class Methods(object):
+    def update_dict(self, kwargs):
+        for k, v in self.__class__.__dict__.items():
+            if k in kwargs:
+                self.__setattr__(k, kwargs[k])
+            else:
+                prop = self.__class__.__dict__[k]
+                if isinstance(prop, Value):
+                    if prop.req:
+                        raise ValueError(f"Поле {k} обязательно.")
+                    else:
+                        self.__setattr__(k, None)
+
+
+class ClientsInterestsRequest(Methods):
     client_ids = ClientIDsField(required=True, nullable=False)
     date = DateField(required=False, nullable=True)
 
@@ -163,7 +152,7 @@ class ClientsInterestsRequest(object):
         return {f"client_id{i}": get_interests(store, i) for i in self.client_ids}
 
 
-class OnlineScoreRequest(object):
+class OnlineScoreRequest(Methods):
     first_name = CharField(required=False, nullable=True)
     last_name = CharField(required=False, nullable=True)
     email = EmailField(required=False, nullable=True)
@@ -190,7 +179,7 @@ class OnlineScoreRequest(object):
             "has": [key for key, value in self.__dict__.items() if value or value == 0]}
 
 
-class MethodRequest(object):
+class MethodRequest(Methods):
     account = CharField(required=False, nullable=True)
     login = CharField(required=True, nullable=True)
     token = CharField(required=True, nullable=True)
@@ -200,22 +189,6 @@ class MethodRequest(object):
     @property
     def is_admin(self):
         return self.login == ADMIN_LOGIN
-
-    @staticmethod
-    def update_dict(obj, kwargs, cls):
-        for k, v in cls.__dict__.items():
-            if k[0] != "_" and k in kwargs:
-                cls.__setattr__(obj, k, kwargs[k])
-            elif k[0] != "_":
-                prop = cls.__dict__[k]
-                property_val = None
-                cls_property = prop.__class__
-                if not issubclass(cls_property, staticmethod) and (not issubclass(cls_property, property)):
-                    property_val = prop._req
-                    if property_val:
-                        raise ValueError(f"Поле {k} обязательно.")
-                    else:
-                        cls.__setattr__(obj, k, None)
 
 
 def check_auth(request):
@@ -238,14 +211,14 @@ def method_handler(request, ctx, store):
                                             request["body"]["login"]
         if check_auth(req):
             prop = request["body"]["arguments"]
-            MethodRequest.update_dict(req, request["body"], req.__class__)
+            req.update_dict(request["body"])
 
             if req.method == "online_score":
                 resp = OnlineScoreRequest()
             elif req.method == "clients_interests":
                 resp = ClientsInterestsRequest()
 
-            MethodRequest.update_dict(resp, prop, resp.__class__)
+            resp.update_dict(prop)
             resp._check_req()
             ctx.update(resp.special_row)
 
@@ -257,7 +230,8 @@ def method_handler(request, ctx, store):
             raise PermissionError
     except PermissionError:
         response, code = ERRORS[FORBIDDEN], FORBIDDEN
-    except Exception as e:
+    # except Exception as e:
+    except SummException as e:
         response, code = ERRORS[INVALID_REQUEST], INVALID_REQUEST
         logging.error(f"{Exception, e}")
 
@@ -306,8 +280,6 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             r = {"error": response or ERRORS.get(code, "Unknown Error"), "code": code}
         context.update(r)
         logging.info(context)
-        # r = json.loads(r)
-
         self.wfile.write(b'r')
         return
 

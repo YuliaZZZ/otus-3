@@ -127,14 +127,20 @@ class Methods(object):
     def update_dict(self, kwargs):
         for k, v in self.__class__.__dict__.items():
             if k in kwargs:
-                self.__setattr__(k, kwargs[k])
+                try:
+                    self.__setattr__(k, kwargs[k])
+                except ValueError as e:
+                    logging.error(e)
             else:
                 prop = self.__class__.__dict__[k]
-                if isinstance(prop, Value):
-                    if prop.req:
-                        raise ValueError(f"Поле {k} обязательно.")
-                    else:
-                        self.__setattr__(k, None)
+                try:
+                    if isinstance(prop, Value):
+                        if prop.req:
+                            raise ValueError(f"Поле {k} обязательно.")
+                        else:
+                            self.__setattr__(k, None)
+                except ValueError as e:
+                    logging.error(e)
 
 
 class ClientsInterestsRequest(Methods):
@@ -209,6 +215,7 @@ def method_handler(request, ctx, store):
         req = MethodRequest()
         req.account, req.token, req.login = request["body"]["account"], request["body"]["token"], \
                                             request["body"]["login"]
+
         if check_auth(req):
             prop = request["body"]["arguments"]
             req.update_dict(request["body"])

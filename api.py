@@ -230,8 +230,7 @@ def method_handler(request, ctx, store):
             raise PermissionError
     except PermissionError:
         response, code = ERRORS[FORBIDDEN], FORBIDDEN
-    # except Exception as e:
-    except SummException as e:
+    except Exception as e:
         response, code = ERRORS[INVALID_REQUEST], INVALID_REQUEST
         logging.error(f"{Exception, e}")
 

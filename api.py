@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import abc
 import json
 import datetime
 import logging
@@ -108,7 +107,6 @@ class BirthDayField(DateField):
         if value >= delta:
             return value
         raise ValueError(f'Поле {self.label} должно содержать дату в формате ДД.ММ.ГГГГ')
-
 
 
 class GenderField(Value):

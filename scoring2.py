@@ -28,7 +28,4 @@ def get_score(store, phone, email, birthday=None, gender=None, first_name=None, 
 
 
 def get_interests(store, cid):
-    r = store.get("i:%s" % cid)
-    if r:
-        return r
-    raise ValueError('Нет запрошенного значения')
+    return store.get("i:%s" % cid)

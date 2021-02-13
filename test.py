@@ -97,7 +97,6 @@ class TestSuite(unittest.TestCase):
     def test_ok_score_request(self, arguments):
         request = {"account": "horns&hoofs", "login": "h&f", "method": "online_score", "arguments": arguments}
         request = self.set_valid_auth(request)
-        print(request)
         response, code, ctx = self.get_response(request)
         self.assertEqual(api.OK, code, arguments)
         score = response.get("score")
@@ -137,6 +136,79 @@ class TestSuite(unittest.TestCase):
         self.set_valid_auth(request)
         response, code, ctx = self.get_response(request)
         self.assertEqual(api.INVALID_REQUEST, code, arguments)
+
+    @cases([
+        ["l", '06-07-1956'],
+        [3, '1987.12.12'],
+        [['a', 'b'], '1.09.90']
+    ])
+    def test_false_fields_clients_interesrs_request(self, arguments):
+        clients_interests = api.ClientsInterestsRequest()
+        with self.assertRaises(ValueError):
+            clients_interests.client_ids = arguments[0]
+        with self.assertRaises(ValueError):
+            clients_interests.date = arguments[1]
+
+    @cases([
+        [(1, 2), '06.07.1956'],
+        [[1, 2], '12.12.1987'],
+        [[1], '01.09.1990']
+    ])
+    def test_ok_fields_clients_interesrs_request(self, arguments):
+        clients_interests = api.ClientsInterestsRequest()
+        clients_interests.client_ids = arguments[0]
+        clients_interests.date = arguments[1]
+        self.assertTrue(isinstance(clients_interests, api.ClientsInterestsRequest))
+
+    @cases([
+        [(1, 2), 'todo.ru', '12.12.1920', '89213333333', 'm'],
+        [2, 'todo', '12.12.87', '755555', 4]
+    ])
+    def test_false_fields_online_score_request(self, arguments):
+        online_score_request = api.OnlineScoreRequest()
+        with self.assertRaises(ValueError):
+            online_score_request.first_name = arguments[0]
+            online_score_request.email = arguments[1]
+            online_score_request.birthday = arguments[2]
+            online_score_request.phone = arguments[3]
+            online_score_request.gender = arguments[4]
+
+    @cases([
+        ['Tom', 'todo@do.ru', '12.12.1980', '79213333333', 1],
+        ['Pol', 't@k.ru', '12.12.1987', '79213333333', 2]
+    ])
+    def test_ok_fields_online_score_request(self, arguments):
+        online_score_request = api.OnlineScoreRequest()
+        online_score_request.first_name = arguments[0]
+        online_score_request.email = arguments[1]
+        online_score_request.birthday = arguments[2]
+        online_score_request.phone = arguments[3]
+        online_score_request.gender = arguments[4]
+        self.assertTrue(isinstance(online_score_request, api.OnlineScoreRequest))
+
+    @cases([
+        [(1, 2), 123, 'abc', 'lol'],
+        [['a', 'b'], 'kl', 'abc', 'lol']
+    ])
+    def test_false_fields_method_request(self, arguments):
+        method_request = api.MethodRequest()
+        with self.assertRaises(ValueError):
+            method_request.arguments = arguments[0]
+            method_request.token = arguments[1]
+            method_request.login = arguments[2]
+            method_request.method = arguments[3]
+
+    @cases([
+        [{}, '', '', ''],
+        [{1: 'jk'}, 'kl', 'abc', 'lol']
+    ])
+    def test_ok_fields_method_request(self, arguments):
+        method_request = api.MethodRequest()
+        method_request.arguments = arguments[0]
+        method_request.token = arguments[1]
+        method_request.login = arguments[2]
+        method_request.method = arguments[3]
+        self.assertTrue(isinstance(method_request, api.MethodRequest))
 
 
 if __name__ == "__main__":

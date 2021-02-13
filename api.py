@@ -145,6 +145,26 @@ class Methods(object):
                     logging.error(e)
 
 
+class Methods(object):
+    def update_dict(self, kwargs):
+        for k, v in self.__class__.__dict__.items():
+            if k in kwargs:
+                try:
+                    self.__setattr__(k, kwargs[k])
+                except ValueError as e:
+                    logging.error(e)
+            else:
+                prop = self.__class__.__dict__[k]
+                try:
+                    if isinstance(prop, Value):
+                        if prop.req:
+                            raise ValueError(f"Поле {k} обязательно.")
+                        else:
+                            self.__setattr__(k, None)
+                except ValueError as e:
+                    logging.error(e)
+
+
 class ClientsInterestsRequest(Methods):
     client_ids = ClientIDsField(required=True, nullable=False)
     date = DateField(required=False, nullable=True)

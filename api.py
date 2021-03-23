@@ -8,7 +8,6 @@ import hashlib
 import uuid
 from optparse import OptionParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-# from scoring import get_interests, get_score
 from scoring2 import get_interests, get_score
 from store import Store
 
@@ -88,7 +87,7 @@ class PhoneField(Value):
     def _get_value(self, value):
         value = str(value)
         if len(value) == 11 and value[0] == '7':
-            return value
+            return str(value)
         raise ValueError(f'Поле {self.label} должно содержать 11 цифр и начинаться с 7')
 
 
@@ -123,26 +122,6 @@ class ClientIDsField(Value):
             if list(map(lambda x: isinstance(x, int), value)) == [True for i in value]:
                 return value
         raise ValueError(f'Поле {self.label} должно содержать перечень значений id')
-
-
-class Methods(object):
-    def update_dict(self, kwargs):
-        for k, v in self.__class__.__dict__.items():
-            if k in kwargs:
-                try:
-                    self.__setattr__(k, kwargs[k])
-                except ValueError as e:
-                    logging.error(e)
-            else:
-                prop = self.__class__.__dict__[k]
-                try:
-                    if isinstance(prop, Value):
-                        if prop.req:
-                            raise ValueError(f"Поле {k} обязательно.")
-                        else:
-                            self.__setattr__(k, None)
-                except ValueError as e:
-                    logging.error(e)
 
 
 class Methods(object):
@@ -270,7 +249,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
     router = {
         "method": method_handler
     }
-    store = Store()  # None
+    store = Store("./config.json")  # None
 
     def get_request_id(self, headers):
         return headers.get('HTTP_X_REQUEST_ID', uuid.uuid4().hex)

@@ -8,7 +8,9 @@ import hashlib
 import uuid
 from optparse import OptionParser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from scoring import get_interests, get_score
+from scoring2 import get_interests, get_score
+from store import Store
+
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -86,7 +88,7 @@ class PhoneField(Value):
     def _get_value(self, value):
         value = str(value)
         if len(value) == 11 and value[0] == '7':
-            return value
+            return str(value)
         raise ValueError(f'Поле {self.label} должно содержать 11 цифр и начинаться с 7')
 
 
@@ -155,7 +157,7 @@ class ClientsInterestsRequest(Methods):
         return {"nclients": len(self.client_ids)}
 
     def _start_method(self, store):
-        return {f"client_id{i}": get_interests(store, i) for i in self.client_ids}
+        return {f"i:{i}": get_interests(store, i) for i in self.client_ids}
 
 
 class OnlineScoreRequest(Methods):
@@ -248,7 +250,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
     router = {
         "method": method_handler
     }
-    store = None
+    store = Store("./config.json")  # None
 
     def get_request_id(self, headers):
         return headers.get('HTTP_X_REQUEST_ID', uuid.uuid4().hex)
